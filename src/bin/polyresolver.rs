@@ -20,12 +20,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     log_tracer::Builder::new().init()?;
 
-    // a builder for `FmtSubscriber`.
     let subscriber = FmtSubscriber::builder()
-        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
-        // will be written to stdout.
         .with_max_level(tracing::Level::INFO)
-        // completes the builder.
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
