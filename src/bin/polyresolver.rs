@@ -168,15 +168,15 @@ fn create_resolver(
 
 // listener routine for TCP, UDP, and TLS.
 pub async fn listen(
-    ip: Option<IpAddr>,
+    listen_ip: Option<IpAddr>,
     nameservers: Vec<IpAddr>,
     tcp_timeout: Duration,
     certs: Option<(X509, Option<Stack<X509>>)>,
     key: Option<PKey<Private>>,
 ) -> Result<(), anyhow::Error> {
-    let ip = ip.unwrap_or(IpAddr::from_str("127.0.0.1")?);
+    let listen_ip = listen_ip.unwrap_or(IpAddr::from_str("127.0.0.1")?);
 
-    let sa = SocketAddr::new(ip, 53);
+    let sa = SocketAddr::new(listen_ip, 53);
     let tcp = TcpListener::bind(sa).await?;
     let udp = UdpSocket::bind(sa).await?;
 
@@ -185,7 +185,7 @@ pub async fn listen(
     if certs.is_some() && key.is_some() {
         info!("Configuring DoT Listener");
 
-        let tls = TcpListener::bind(SocketAddr::new(ip, 853)).await?;
+        let tls = TcpListener::bind(SocketAddr::new(listen_ip, 853)).await?;
         match sf.register_tls_listener(tls, tcp_timeout, (certs.unwrap(), key.clone().unwrap())) {
             Ok(_) => {}
             Err(e) => error!("Cannot start DoT listener: {}", e),
@@ -220,7 +220,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::INFO)
         // completes the builder.
         .finish();
 
