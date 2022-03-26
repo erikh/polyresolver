@@ -139,7 +139,7 @@ fn create_resolver(
     search_names: Vec<Name>,
 ) -> Result<Resolver, ResolveError> {
     let mut opts = ResolverOpts::default();
-    opts.timeout = Duration::new(10, 0);
+    opts.timeout = Duration::new(1, 0);
     opts.cache_size = 0;
     opts.rotate = true;
     opts.use_hosts_file = false;
