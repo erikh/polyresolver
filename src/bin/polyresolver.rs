@@ -13,6 +13,8 @@ use openssl::{
 };
 use tokio::net::{TcpListener, UdpSocket};
 use tracing::{error, info};
+use tracing_log::log_tracer;
+use tracing_subscriber::FmtSubscriber;
 use trust_dns_resolver::{
     config::{NameServerConfig, ResolverConfig, ResolverOpts},
     error::ResolveError,
@@ -212,7 +214,17 @@ async fn main() -> Result<(), anyhow::Error> {
         .map(|f| IpAddr::from_str(&f).expect("invalid IP for nameserver"))
         .collect();
 
-    env_logger::init();
+    log_tracer::Builder::new().init()?;
+
+    // a builder for `FmtSubscriber`.
+    let subscriber = FmtSubscriber::builder()
+        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
+        // will be written to stdout.
+        .with_max_level(tracing::Level::TRACE)
+        // completes the builder.
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     listen(ip, nameservers, Duration::new(1, 0), None, None).await
 }

@@ -10,7 +10,8 @@ trust-dns-resolver = "*"
 trust-dns-server = { version = "*", features = [ "dns-over-openssl" ] }
 tokio = { version = "*", features = ["full"] }
 tracing = "*"
+tracing-log = "*"
+tracing-subscriber = "*"
 openssl = "*"
 anyhow = "*"
 async-trait = "*"
-env_logger = "*"
