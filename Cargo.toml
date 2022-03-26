@@ -15,3 +15,5 @@ tracing-subscriber = "*"
 openssl = "*"
 anyhow = "*"
 async-trait = "*"
+
+[lib]
