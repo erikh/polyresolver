@@ -1,16 +1,20 @@
-use std::{
-    net::IpAddr,
-    path::PathBuf,
-    time::{Duration, SystemTime},
-};
+use std::{net::IpAddr, path::PathBuf, time::Duration};
 
 use anyhow::anyhow;
+use notify::{watcher, DebouncedEvent, Watcher};
 use serde::{Deserialize, Serialize};
-use tokio::{sync::mpsc, time::interval};
+use tokio::sync::mpsc;
 use tracing::error;
 use trust_dns_resolver::{config::Protocol, Name};
 
 use crate::resolver::Resolver;
+
+#[derive(Debug, Clone)]
+pub struct ConfigUpdate {
+    pub config_filename: PathBuf,
+    pub configure: bool,
+    pub config: Option<Config>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -40,47 +44,98 @@ impl ConfigDir {
         Self(path)
     }
 
-    pub async fn scan(self, configs: mpsc::Sender<Config>) {
-        let mut interval = interval(Duration::new(1, 0));
+    pub async fn watcher(
+        self,
+        configs: mpsc::Sender<ConfigUpdate>,
+        closer: std::sync::mpsc::Receiver<()>,
+    ) {
+        let (tx, mut rx) = mpsc::unbounded_channel();
 
-        // FIXME only scan new files. This probably races and we'll need inotify etc later. this is
-        //       just simpler right now.
-        let mut now = std::time::UNIX_EPOCH;
+        let reader_tx = tx.clone();
+        let reader_self = self.clone();
+        std::thread::spawn(move || {
+            for item in std::fs::read_dir(reader_self.0.clone()).expect("Cannot read directory") {
+                let item = item.expect("cannot stat file");
+                if let Ok(meta) = item.metadata() {
+                    if meta.is_file() {
+                        reader_tx
+                            .send(Ok(DebouncedEvent::NoticeWrite(item.path())))
+                            .expect("cannot send item");
+                    }
+                }
+            }
+        });
+
+        let watcher_self = self.clone();
+
+        std::thread::spawn(move || {
+            let (s, r) = std::sync::mpsc::channel();
+            let mut watcher =
+                watcher(s, Duration::new(1, 0)).expect("Could not initialize watcher");
+
+            watcher
+                .watch(watcher_self.0.clone(), notify::RecursiveMode::NonRecursive)
+                .expect(&format!(
+                    "Could not watch directory: {}",
+                    watcher_self.0.display()
+                ));
+
+            loop {
+                let item = r.recv();
+                tx.send(item).expect("cannot send over channel");
+
+                if let Ok(()) = closer.try_recv() {
+                    return;
+                }
+            }
+        });
 
         loop {
-            match std::fs::read_dir(self.0.clone()) {
-                Ok(dir) => {
-                    for item in dir {
-                        if let Ok(item) = item {
-                            if let Ok(meta) = item.metadata() {
-                                if !meta.is_dir()
-                                    && (meta.modified().is_ok() && meta.modified().unwrap() > now)
-                                {
-                                    let config = Config::new(item.path());
-                                    match config {
-                                        Ok(config) => match configs.send(config).await {
-                                            Ok(_) => {}
-                                            Err(e) => error!("{:#?}: {}", item.file_name(), e),
-                                        },
-                                        Err(e) => error!("{:#?}: {}", item.file_name(), e),
-                                    }
+            let item = rx.recv().await.expect("receive failure from watcher");
+            match item {
+                Ok(DebouncedEvent::NoticeWrite(item)) | Ok(DebouncedEvent::Create(item)) => {
+                    if let Ok(meta) = item.clone().metadata() {
+                        if !meta.is_dir() {
+                            let config = Config::new(item.clone());
+                            match config {
+                                Ok(config) => {
+                                    configs
+                                        .send(ConfigUpdate {
+                                            config_filename: item,
+                                            configure: true,
+                                            config: Some(config),
+                                        })
+                                        .await
+                                        .expect(&format!(
+                                            "could not deliver configuration {} from notify",
+                                            self.0.display(),
+                                        ));
                                 }
+                                Err(e) => eprintln!("{:#?}: {}", item.file_name(), e),
                             }
                         }
                     }
                 }
-                Err(e) => error!("Could not read configuration directory: {}", e),
+                Ok(DebouncedEvent::NoticeRemove(item)) => configs
+                    .send(ConfigUpdate {
+                        config_filename: item,
+                        configure: false,
+                        config: None,
+                    })
+                    .await
+                    .expect("could not delete configuration"),
+                Err(e) => eprintln!("Error watching files: {}", e),
+                Ok(_) => {}
             }
-
-            now = SystemTime::now();
-            interval.tick().await;
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use std::{path::PathBuf, str::FromStr};
+
+    use super::{Config, ConfigDir};
 
     #[test]
     fn test_config_constructor() {
@@ -108,5 +163,52 @@ mod tests {
         }
 
         assert!(count > 0);
+    }
+
+    const TEMPORARY_CONFIG: &str = "testdata/configs/valid/temporary.yaml";
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_config_scanner() {
+        std::fs::remove_file(TEMPORARY_CONFIG).unwrap_or(());
+
+        let dirscanner = ConfigDir::new(PathBuf::from_str("testdata/configs/valid").unwrap());
+        let (s, mut r) = tokio::sync::mpsc::channel(1);
+        let (closer_s, closer_r) = std::sync::mpsc::channel();
+
+        tokio::spawn(dirscanner.watcher(s, closer_r));
+        let (mut filecount, mut recvcount) = (0, 0);
+
+        for file in std::fs::read_dir("testdata/configs/valid").unwrap() {
+            if file.unwrap().metadata().unwrap().is_file() {
+                filecount += 1
+            }
+        }
+
+        for _ in r.recv().await {
+            recvcount += 1;
+        }
+
+        assert!(recvcount == filecount);
+        recvcount = 0;
+
+        // create a new config
+        std::fs::write(
+            TEMPORARY_CONFIG,
+            r#"domain_name: foo
+forwarders:
+    - 127.0.0.1
+    - 192.168.1.1
+protocol: udp
+"#,
+        )
+        .unwrap();
+
+        for _ in r.recv().await {
+            recvcount += 1;
+        }
+
+        assert!(recvcount == 1);
+
+        closer_s.send(()).unwrap();
     }
 }

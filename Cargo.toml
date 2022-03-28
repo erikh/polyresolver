@@ -17,5 +17,6 @@ anyhow = "*"
 async-trait = "*"
 serde_yaml = "*"
 serde = "*"
+notify = "*"
 
 [lib]
