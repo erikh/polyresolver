@@ -77,3 +77,36 @@ impl ConfigDir {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn test_config_constructor() {
+        let mut count = 0;
+
+        for file in std::fs::read_dir("testdata/configs/valid").unwrap() {
+            let file = file.unwrap();
+            if file.metadata().unwrap().is_file() {
+                let res = Config::new(file.path());
+                assert!(res.is_ok());
+                count += 1;
+            }
+        }
+
+        assert!(count > 0);
+        count = 0;
+
+        for file in std::fs::read_dir("testdata/configs/invalid").unwrap() {
+            let file = file.unwrap();
+            if file.metadata().unwrap().is_file() {
+                let res = Config::new(file.path());
+                assert!(res.is_err());
+                count += 1;
+            }
+        }
+
+        assert!(count > 0);
+    }
+}

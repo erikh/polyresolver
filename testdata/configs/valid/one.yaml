@@ -1,0 +1,6 @@
+domain_name: foo
+forwarders:
+  - 1.2.3.4
+  - 127.0.0.1
+  - 192.168.1.1
+protocol: udp
