@@ -1,4 +1,8 @@
-use std::{net::IpAddr, path::PathBuf, time::Duration};
+use std::{
+    net::IpAddr,
+    path::PathBuf,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -39,13 +43,19 @@ impl ConfigDir {
     pub async fn scan(self, configs: mpsc::Sender<Config>) {
         let mut interval = interval(Duration::new(1, 0));
 
+        // FIXME only scan new files. This probably races and we'll need inotify etc later. this is
+        //       just simpler right now.
+        let mut now = std::time::UNIX_EPOCH;
+
         loop {
             match std::fs::read_dir(self.0.clone()) {
                 Ok(dir) => {
                     for item in dir {
                         if let Ok(item) = item {
                             if let Ok(meta) = item.metadata() {
-                                if !meta.is_dir() {
+                                if !meta.is_dir()
+                                    && (meta.modified().is_ok() && meta.modified().unwrap() > now)
+                                {
                                     let config = Config::new(item.path());
                                     match config {
                                         Ok(config) => match configs.send(config).await {
@@ -62,6 +72,7 @@ impl ConfigDir {
                 Err(e) => error!("Could not read configuration directory: {}", e),
             }
 
+            now = SystemTime::now();
             interval.tick().await;
         }
     }
