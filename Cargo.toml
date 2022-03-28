@@ -15,5 +15,7 @@ tracing-subscriber = "*"
 openssl = "*"
 anyhow = "*"
 async-trait = "*"
+serde_yaml = "*"
+serde = "*"
 
 [lib]
