@@ -20,3 +20,6 @@ serde = "*"
 notify = "*"
 
 [lib]
+
+[dev-dependencies]
+tempdir = "*"

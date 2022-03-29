@@ -12,7 +12,6 @@ use crate::resolver::Resolver;
 #[derive(Debug, Clone)]
 pub struct ConfigUpdate {
     pub config_filename: PathBuf,
-    pub configure: bool,
     pub config: Option<Config>,
 }
 
@@ -102,7 +101,6 @@ impl ConfigDir {
                                     configs
                                         .send(ConfigUpdate {
                                             config_filename: item,
-                                            configure: true,
                                             config: Some(config),
                                         })
                                         .await
@@ -111,7 +109,7 @@ impl ConfigDir {
                                             self.0.display(),
                                         ));
                                 }
-                                Err(e) => eprintln!("{:#?}: {}", item.file_name(), e),
+                                Err(e) => error!("{:#?}: {}", item.file_name(), e),
                             }
                         }
                     }
@@ -119,12 +117,11 @@ impl ConfigDir {
                 Ok(DebouncedEvent::NoticeRemove(item)) => configs
                     .send(ConfigUpdate {
                         config_filename: item,
-                        configure: false,
                         config: None,
                     })
                     .await
                     .expect("could not delete configuration"),
-                Err(e) => eprintln!("Error watching files: {}", e),
+                Err(e) => error!("Error watching files: {}", e),
                 Ok(_) => {}
             }
         }
@@ -133,8 +130,6 @@ impl ConfigDir {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, str::FromStr};
-
     use super::{Config, ConfigDir};
 
     #[test]
@@ -165,20 +160,25 @@ mod tests {
         assert!(count > 0);
     }
 
-    const TEMPORARY_CONFIG: &str = "testdata/configs/valid/temporary.yaml";
+    const TEMPORARY_CONFIG: &str = "temporary.yaml";
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_config_scanner() {
-        std::fs::remove_file(TEMPORARY_CONFIG).unwrap_or(());
+        use tempdir::TempDir;
 
-        let dirscanner = ConfigDir::new(PathBuf::from_str("testdata/configs/valid").unwrap());
+        let dir = TempDir::new("polyresolver_config").unwrap();
+        let dirpath = dir.into_path();
+
+        std::fs::copy("testdata/configs/valid/one.yaml", dirpath.join("one.yaml")).unwrap();
+
+        let dirscanner = ConfigDir::new(dirpath.clone());
         let (s, mut r) = tokio::sync::mpsc::channel(1);
         let (closer_s, closer_r) = std::sync::mpsc::channel();
 
         tokio::spawn(dirscanner.watcher(s, closer_r));
         let (mut filecount, mut recvcount) = (0, 0);
 
-        for file in std::fs::read_dir("testdata/configs/valid").unwrap() {
+        for file in std::fs::read_dir(dirpath.clone()).unwrap() {
             if file.unwrap().metadata().unwrap().is_file() {
                 filecount += 1
             }
@@ -193,7 +193,7 @@ mod tests {
 
         // create a new config
         std::fs::write(
-            TEMPORARY_CONFIG,
+            dirpath.join(TEMPORARY_CONFIG),
             r#"domain_name: foo
 forwarders:
     - 127.0.0.1
