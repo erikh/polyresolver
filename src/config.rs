@@ -12,7 +12,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::error;
 use trust_dns_resolver::{config::Protocol, Name};
 
-use crate::forwarder::Forwarder;
+use crate::{forwarder::Forwarder, resolver::create_resolver};
 
 #[derive(Debug, Clone)]
 pub struct ConfigUpdate {
@@ -40,7 +40,10 @@ impl Config {
     }
 
     pub fn forwarder(&self) -> Result<Box<Arc<Forwarder>>, anyhow::Error> {
-        Err(anyhow!("unimplemented"))
+        Ok(Box::new(Arc::new(Forwarder {
+            domain_name: self.domain_name.clone().into(),
+            resolver: create_resolver(self.forwarders.clone(), Vec::new())?,
+        })))
     }
 }
 

@@ -8,8 +8,8 @@ use polyresolver::listener::listen;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let mut args = std::env::args();
-    let config_dir = if let Some(arg) = args.nth(1) {
+    let mut args = std::env::args().skip(1);
+    let config_dir = if let Some(arg) = args.next() {
         PathBuf::from_str(&arg)?
     } else {
         return Err(anyhow!(
@@ -17,7 +17,7 @@ async fn main() -> Result<(), anyhow::Error> {
         ));
     };
 
-    let ip = if let Some(arg) = args.nth(1) {
+    let ip = if let Some(arg) = args.next() {
         Some(IpAddr::from_str(&arg)?)
     } else {
         None
@@ -26,7 +26,7 @@ async fn main() -> Result<(), anyhow::Error> {
     log_tracer::Builder::new().init()?;
 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::TRACE)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
