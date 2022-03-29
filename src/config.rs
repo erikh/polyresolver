@@ -1,9 +1,9 @@
-use std::{net::IpAddr, path::PathBuf, time::Duration};
+use std::{net::IpAddr, path::PathBuf, sync::mpsc::RecvError, time::Duration};
 
 use anyhow::anyhow;
 use notify::{watcher, DebouncedEvent, Watcher};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::error;
 use trust_dns_resolver::{config::Protocol, Name};
 
@@ -36,59 +36,53 @@ impl Config {
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigDir(PathBuf);
+pub struct ConfigWatcher(PathBuf);
 
-impl ConfigDir {
+impl ConfigWatcher {
     pub fn new(path: PathBuf) -> Self {
         Self(path)
     }
 
-    pub async fn watcher(
+    fn read_entire_dir(self, reader_tx: UnboundedSender<Result<DebouncedEvent, RecvError>>) {
+        for item in std::fs::read_dir(self.0.clone()).expect("Cannot read directory") {
+            let item = item.expect("cannot stat file");
+            if let Ok(meta) = item.metadata() {
+                if meta.is_file() {
+                    reader_tx
+                        .send(Ok(DebouncedEvent::NoticeWrite(item.path())))
+                        .expect("cannot send item");
+                }
+            }
+        }
+    }
+
+    fn boot_watcher(
         self,
-        configs: mpsc::Sender<ConfigUpdate>,
+        tx: UnboundedSender<Result<DebouncedEvent, RecvError>>,
         closer: std::sync::mpsc::Receiver<()>,
     ) {
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (s, r) = std::sync::mpsc::channel();
+        let mut watcher = watcher(s, Duration::new(1, 0)).expect("Could not initialize watcher");
 
-        let reader_tx = tx.clone();
-        let reader_self = self.clone();
-        std::thread::spawn(move || {
-            for item in std::fs::read_dir(reader_self.0.clone()).expect("Cannot read directory") {
-                let item = item.expect("cannot stat file");
-                if let Ok(meta) = item.metadata() {
-                    if meta.is_file() {
-                        reader_tx
-                            .send(Ok(DebouncedEvent::NoticeWrite(item.path())))
-                            .expect("cannot send item");
-                    }
-                }
+        watcher
+            .watch(self.0.clone(), notify::RecursiveMode::NonRecursive)
+            .expect(&format!("Could not watch directory: {}", self.0.display()));
+
+        loop {
+            let item = r.recv();
+            tx.send(item).expect("cannot send over channel");
+
+            if let Ok(()) = closer.try_recv() {
+                return;
             }
-        });
+        }
+    }
 
-        let watcher_self = self.clone();
-
-        std::thread::spawn(move || {
-            let (s, r) = std::sync::mpsc::channel();
-            let mut watcher =
-                watcher(s, Duration::new(1, 0)).expect("Could not initialize watcher");
-
-            watcher
-                .watch(watcher_self.0.clone(), notify::RecursiveMode::NonRecursive)
-                .expect(&format!(
-                    "Could not watch directory: {}",
-                    watcher_self.0.display()
-                ));
-
-            loop {
-                let item = r.recv();
-                tx.send(item).expect("cannot send over channel");
-
-                if let Ok(()) = closer.try_recv() {
-                    return;
-                }
-            }
-        });
-
+    async fn do_recv(
+        self,
+        mut rx: UnboundedReceiver<Result<DebouncedEvent, RecvError>>,
+        configs: mpsc::Sender<ConfigUpdate>,
+    ) {
         loop {
             let item = rx.recv().await.expect("receive failure from watcher");
             match item {
@@ -126,11 +120,28 @@ impl ConfigDir {
             }
         }
     }
+
+    pub async fn watcher(
+        self,
+        configs: mpsc::Sender<ConfigUpdate>,
+        closer: std::sync::mpsc::Receiver<()>,
+    ) {
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        let reader_tx = tx.clone();
+        let reader_self = self.clone();
+        std::thread::spawn(move || reader_self.read_entire_dir(reader_tx));
+
+        let watcher_self = self.clone();
+        std::thread::spawn(move || watcher_self.boot_watcher(tx, closer));
+
+        self.do_recv(rx, configs).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, ConfigDir};
+    use super::{Config, ConfigWatcher};
 
     #[test]
     fn test_config_constructor() {
@@ -163,7 +174,7 @@ mod tests {
     const TEMPORARY_CONFIG: &str = "temporary.yaml";
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_config_scanner() {
+    async fn test_config_watcher() {
         use tempdir::TempDir;
 
         let dir = TempDir::new("polyresolver_config").unwrap();
@@ -171,7 +182,7 @@ mod tests {
 
         std::fs::copy("testdata/configs/valid/one.yaml", dirpath.join("one.yaml")).unwrap();
 
-        let dirscanner = ConfigDir::new(dirpath.clone());
+        let dirscanner = ConfigWatcher::new(dirpath.clone());
         let (s, mut r) = tokio::sync::mpsc::channel(1);
         let (closer_s, closer_r) = std::sync::mpsc::channel();
 
