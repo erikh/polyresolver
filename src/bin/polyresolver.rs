@@ -1,5 +1,6 @@
-use std::{net::IpAddr, str::FromStr, time::Duration};
+use std::{net::IpAddr, path::PathBuf, str::FromStr, time::Duration};
 
+use anyhow::anyhow;
 use tracing_log::log_tracer;
 use tracing_subscriber::FmtSubscriber;
 
@@ -8,15 +9,19 @@ use polyresolver::listener::listen;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let mut args = std::env::args();
+    let config_dir = if let Some(arg) = args.nth(1) {
+        PathBuf::from_str(&arg)?
+    } else {
+        return Err(anyhow!(
+            "You must provide us with a configuration directory"
+        ));
+    };
+
     let ip = if let Some(arg) = args.nth(1) {
         Some(IpAddr::from_str(&arg)?)
     } else {
         None
     };
-
-    let nameservers = args
-        .map(|f| IpAddr::from_str(&f).expect("invalid IP for nameserver"))
-        .collect();
 
     log_tracer::Builder::new().init()?;
 
@@ -26,5 +31,5 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    listen(ip, nameservers, Duration::new(1, 0), None, None).await
+    listen(ip, config_dir, Duration::new(1, 0), None, None).await
 }

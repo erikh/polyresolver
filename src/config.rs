@@ -1,4 +1,9 @@
-use std::{net::IpAddr, path::PathBuf, sync::mpsc::RecvError, time::Duration};
+use std::{
+    net::IpAddr,
+    path::PathBuf,
+    sync::{mpsc::RecvError, Arc},
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use notify::{watcher, DebouncedEvent, Watcher};
@@ -7,7 +12,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::error;
 use trust_dns_resolver::{config::Protocol, Name};
 
-use crate::resolver::Resolver;
+use crate::forwarder::Forwarder;
 
 #[derive(Debug, Clone)]
 pub struct ConfigUpdate {
@@ -30,7 +35,11 @@ impl Config {
         }
     }
 
-    pub fn make_resolvers(&self) -> Result<Resolver, anyhow::Error> {
+    pub fn domain_name(&self) -> Name {
+        self.domain_name.clone()
+    }
+
+    pub fn forwarder(&self) -> Result<Box<Arc<Forwarder>>, anyhow::Error> {
         Err(anyhow!("unimplemented"))
     }
 }
@@ -121,7 +130,7 @@ impl ConfigWatcher {
         }
     }
 
-    pub async fn watcher(
+    pub async fn watch(
         self,
         configs: mpsc::Sender<ConfigUpdate>,
         closer: std::sync::mpsc::Receiver<()>,
@@ -174,7 +183,7 @@ mod tests {
     const TEMPORARY_CONFIG: &str = "temporary.yaml";
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_config_watcher() {
+    async fn test_config_watch() {
         use tempdir::TempDir;
 
         let dir = TempDir::new("polyresolver_config").unwrap();
@@ -186,7 +195,7 @@ mod tests {
         let (s, mut r) = tokio::sync::mpsc::channel(1);
         let (closer_s, closer_r) = std::sync::mpsc::channel();
 
-        tokio::spawn(dirscanner.watcher(s, closer_r));
+        tokio::spawn(dirscanner.watch(s, closer_r));
         let (mut filecount, mut recvcount) = (0, 0);
 
         for file in std::fs::read_dir(dirpath.clone()).unwrap() {

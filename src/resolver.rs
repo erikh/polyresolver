@@ -1,13 +1,21 @@
 use std::{
+    collections::BTreeMap,
     net::{IpAddr, SocketAddr},
+    path::PathBuf,
     time::Duration,
 };
 
+use anyhow::anyhow;
 use trust_dns_resolver::{
     config::{NameServerConfig, ResolverConfig, ResolverOpts},
     error::ResolveError,
     name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime},
     AsyncResolver, Name,
+};
+
+use crate::{
+    catalog::LockedCatalog,
+    config::{Config, ConfigUpdate},
 };
 
 pub type Resolver = AsyncResolver<GenericConnection, GenericConnectionProvider<TokioRuntime>>;
@@ -42,4 +50,52 @@ pub fn create_resolver(
     }
 
     trust_dns_resolver::TokioAsyncResolver::tokio(resolver_config, opts)
+}
+
+#[derive(Clone)]
+pub struct ResolverCollection {
+    configs: BTreeMap<PathBuf, Config>,
+    catalog: LockedCatalog,
+}
+
+impl ResolverCollection {
+    pub fn new(catalog: LockedCatalog) -> Self {
+        Self {
+            catalog,
+            configs: BTreeMap::new(),
+        }
+    }
+
+    pub async fn set_config(&mut self, update: ConfigUpdate) -> Result<(), anyhow::Error> {
+        if update.config.is_none() {
+            return Err(anyhow!(
+                "Tried to insert deleted configuration {}",
+                update.config_filename.display()
+            ));
+        }
+
+        let config = update.config.unwrap();
+
+        self.configs.insert(update.config_filename, config.clone());
+
+        self.catalog
+            .write()
+            .await
+            .upsert(config.domain_name().into(), config.forwarder()?);
+
+        Ok(())
+    }
+
+    pub async fn remove_config(&mut self, update: ConfigUpdate) -> Result<(), anyhow::Error> {
+        let config = self.configs.remove(&update.config_filename);
+
+        if let Some(config) = config {
+            self.catalog
+                .write()
+                .await
+                .remove(&config.domain_name().into());
+        }
+
+        Ok(())
+    }
 }

@@ -1,5 +1,6 @@
 use std::{
     net::{IpAddr, SocketAddr},
+    path::PathBuf,
     str::FromStr,
     time::Duration,
 };
@@ -13,12 +14,12 @@ use tokio::net::{TcpListener, UdpSocket};
 use tracing::{error, info};
 use trust_dns_server::ServerFuture;
 
-use crate::catalog::init_catalog;
+use crate::catalog::PolyCatalog;
 
 // listener routine for TCP, UDP, and TLS.
-pub async fn listen(
+pub async fn listen<'a>(
     listen_ip: Option<IpAddr>,
-    nameservers: Vec<IpAddr>,
+    config_dir: PathBuf,
     tcp_timeout: Duration,
     certs: Option<(X509, Option<Stack<X509>>)>,
     key: Option<PKey<Private>>,
@@ -29,7 +30,11 @@ pub async fn listen(
     let tcp = TcpListener::bind(sa).await?;
     let udp = UdpSocket::bind(sa).await?;
 
-    let mut sf = ServerFuture::new(init_catalog(nameservers, Vec::new()).await?);
+    let (closer_s, closer_r) = std::sync::mpsc::channel();
+    let catalog = PolyCatalog::new();
+
+    let mut sf = ServerFuture::new(catalog.clone());
+    tokio::spawn(catalog.sync_catalog(config_dir, closer_r));
 
     if certs.is_some() && key.is_some() {
         info!("Configuring DoT Listener");
@@ -44,8 +49,11 @@ pub async fn listen(
     sf.register_socket(udp);
     sf.register_listener(tcp, tcp_timeout);
 
-    match sf.block_until_done().await {
+    let res = match sf.block_until_done().await {
         Ok(_) => Ok(()),
         Err(e) => Err(anyhow::anyhow!("{}", e)),
-    }
+    };
+
+    closer_s.send(()).expect("Could not close sync_catalog");
+    res
 }
