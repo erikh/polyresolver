@@ -13,6 +13,8 @@ protocol: udp
 
 Config files can be added and removed at any time without restarting the daemon. This makes it ideal for use with e.g., dhcp post-renew scripts.
 
+To launch: `polyresolver <config dir> <(optional) listen ip>`. It runs in the foreground so be sure to supervise it with something.
+
 Does this look familiar? It should, OS X and Windows and systemd (but not Linux!) all have this functionality. polyresolver is most analogous to `systemd-resolved`, just without the dependency on `systemd-networkd` or `systemd` in general. It also should be a cross-platform product also working on Windows, OS X, FreeBSD (anywhere rust and openssl compile, really), allowing this functionality to be used universally in the same way.
 
 ## Author
