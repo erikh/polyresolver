@@ -21,6 +21,8 @@ Does this look familiar? It should, OS X and Windows and systemd (but not Linux!
 
 Erik Hollensbe <git@hollensbe.org>
 
+This product makes heavy use (and would not be possible without) the [trust-dns](https://github.com/bluejekyll/trust-dns) rust toolkit.
+
 ## License
 
 BSD 3-Clause
