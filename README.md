@@ -3,12 +3,12 @@
 polyresolver is used to root domain names to different nameservers for the purposes of resolving domains down different pathways. In DNS terms this is called "split horizon DNS" but is usually done at the server-side. This is intended to do it at the client-side. It exposes a server on an IP, `127.0.0.1` by default (but you can override this) and provides a UDP and TCP resolver over port 53. It then scans a configuration directory for YAML files that have this format:
 
 ```yaml
-domain_name: foo
-forwarders:
+domain_name: foo # from the TLD up, the domain you wish to forward. Use `.` for the root.
+forwarders: # the list of forwarders you wish to contact to resolve this domain.
   - 1.2.3.4
   - 127.0.0.1
   - 192.168.1.1
-protocol: udp
+protocol: udp # udp or tls, the type of resolvers in the forwarders list.
 ```
 
 Config files can be added and removed at any time without restarting the daemon. This makes it ideal for use with e.g., dhcp post-renew scripts.
