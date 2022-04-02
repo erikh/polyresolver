@@ -2,22 +2,30 @@
 name = "polyresolver"
 version = "0.1.0"
 edition = "2021"
+description = "DNS resolver for client-side split horizon resolution over multiple domain arenas"
+authors = [ "Erik Hollensbe <git@hollensbe.org>" ]
+homepage = "https://github.com/erikh/polyresolver"
+repository = "https://github.com/erikh/polyresolver"
+documentation = "https://github.com/erikh/polyresolver/blob/main/README.md"
+license = "BSD-3-Clause"
+readme = "README.md"
+keywords = [ "dns" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-trust-dns-resolver = "*"
-trust-dns-server = { version = "*", features = [ "dns-over-openssl" ] }
-tokio = { version = "*", features = ["full"] }
-tracing = "*"
-tracing-log = "*"
-tracing-subscriber = "*"
-openssl = "*"
-anyhow = "*"
-async-trait = "*"
-serde_yaml = "*"
-serde = "*"
-notify = "*"
+trust-dns-resolver = "0.21.2"
+trust-dns-server = { version = "0.21.2", features = [ "dns-over-openssl" ] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-log = "0.1"
+tracing-subscriber = "0.2"
+openssl = ">=0"
+anyhow = ">=0"
+async-trait = ">=0"
+serde_yaml = ">=0"
+serde = ">=0"
+notify = "4"
 
 [lib]
 
