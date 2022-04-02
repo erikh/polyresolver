@@ -1,0 +1,4 @@
+domain_name: foo
+forwarders:
+  - 10.254.128.97
+protocol: udp

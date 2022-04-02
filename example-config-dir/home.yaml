@@ -1,0 +1,4 @@
+domain_name: home.arpa
+forwarders:
+  - 10.147.19.148
+protocol: tls
