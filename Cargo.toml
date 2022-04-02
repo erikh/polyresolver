@@ -30,4 +30,4 @@ notify = "4"
 [lib]
 
 [dev-dependencies]
-tempdir = "*"
+tempdir = ">=0"
