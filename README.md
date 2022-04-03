@@ -8,7 +8,7 @@ forwarders: # the list of forwarders you wish to contact to resolve this domain.
   - 1.2.3.4
   - 127.0.0.1
   - 192.168.1.1
-protocol: udp # udp or tls, the type of resolvers in the forwarders list.
+protocol: udp # udp or tls, the type of resolvers in the forwarders list. tls is not supported yet.
 ```
 
 Config files can be added and removed at any time without restarting the daemon. This makes it ideal for use with e.g., dhcp post-renew scripts.

@@ -5,11 +5,7 @@ use std::{
     time::Duration,
 };
 
-use openssl::{
-    pkey::{PKey, Private},
-    stack::Stack,
-    x509::X509,
-};
+use rustls::{Certificate, PrivateKey};
 use tokio::net::{TcpListener, UdpSocket};
 use tracing::{error, info};
 use trust_dns_server::ServerFuture;
@@ -21,8 +17,8 @@ pub async fn listen<'a>(
     listen_ip: Option<IpAddr>,
     config_dir: PathBuf,
     tcp_timeout: Duration,
-    certs: Option<(X509, Option<Stack<X509>>)>,
-    key: Option<PKey<Private>>,
+    certs: Option<Vec<Certificate>>,
+    key: Option<PrivateKey>,
 ) -> Result<(), anyhow::Error> {
     let listen_ip = listen_ip.unwrap_or(IpAddr::from_str("127.0.0.1")?);
 
@@ -40,7 +36,7 @@ pub async fn listen<'a>(
         info!("Configuring DoT Listener");
 
         let tls = TcpListener::bind(SocketAddr::new(listen_ip, 853)).await?;
-        match sf.register_tls_listener(tls, tcp_timeout, (certs.unwrap(), key.clone().unwrap())) {
+        match sf.register_tls_listener(tls, tcp_timeout, (certs.unwrap(), key.unwrap())) {
             Ok(_) => {}
             Err(e) => error!("Cannot start DoT listener: {}", e),
         }
