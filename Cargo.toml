@@ -1,6 +1,6 @@
 [package]
 name = "polyresolver"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "DNS resolver for client-side split horizon resolution over multiple domain arenas"
 authors = [ "Erik Hollensbe <git@hollensbe.org>" ]
