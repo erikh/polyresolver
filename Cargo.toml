@@ -14,8 +14,8 @@ keywords = [ "dns" ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-trust-dns-resolver = "0.21.2"
-trust-dns-server = { version = "0.21.2", features = [ "dns-over-rustls" ] }
+trust-dns-resolver = "^0.22.0"
+trust-dns-server = { version = "^0.22.0", features = [ "dns-over-rustls" ] }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-log = "0.1"

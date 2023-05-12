@@ -207,7 +207,7 @@ mod tests {
             }
         }
 
-        for _ in r.recv().await {
+        if let Some(_) = r.recv().await {
             recvcount += 1;
         }
 
@@ -226,7 +226,7 @@ protocol: udp
         )
         .unwrap();
 
-        for _ in r.recv().await {
+        if let Some(_) = r.recv().await {
             recvcount += 1;
         }
 

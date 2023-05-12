@@ -1,12 +1,8 @@
 use crate::resolver::Resolver;
-
 use async_trait::async_trait;
 use trust_dns_resolver::{
     lookup,
-    proto::{
-        rr::{Record, RecordType},
-        xfer::DnsRequestOptions,
-    },
+    proto::rr::{Record, RecordType},
 };
 use trust_dns_server::{
     authority::{Authority, LookupError, LookupObject},
@@ -48,10 +44,7 @@ impl Authority for Forwarder {
         rtype: RecordType,
         _lookup_options: trust_dns_server::authority::LookupOptions,
     ) -> Result<Self::Lookup, LookupError> {
-        let lookup = self
-            .resolver
-            .lookup(name, rtype, DnsRequestOptions::default())
-            .await;
+        let lookup = self.resolver.lookup(name, rtype).await;
 
         lookup.map(ForwardLookup).map_err(LookupError::from)
     }
